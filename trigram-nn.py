@@ -31,9 +31,10 @@ with open('names.txt', 'r') as file:
     names = [line.strip() for line in file]
 
 
-W = torch.rand(27,27, requires_grad=True)
+W = torch.rand(54,27, requires_grad=True)
 xs = []
 ys = []
+nNames = len(names)
 developmentSetIndex = 2500
 trainingSetIndex = 29533
 
@@ -43,16 +44,21 @@ development_ys = []
 testing_ys = []
 nDevelopmentExamples = 0
 nTestingExamples = 0
+
+
+
 nExamples = 0
-for name in names:
+for name in names[0:developmentSetIndex]:
     treatedName = "." + name + "."
-    for ch1, ch2 in zip(treatedName, treatedName[1:]):
+    for ch1, ch2, ch3 in zip(treatedName, treatedName[1:], treatedName[2:]):
         ch1Index = charToIntMapping[ch1]
         ch2Index = charToIntMapping[ch2]
-        x_one_hot = torch.zeros(27)
+        ch3Index = charToIntMapping[ch3]
+        x_one_hot = torch.zeros(54)
         x_one_hot[ch1Index] = 1
+        x_one_hot[ch2Index + 27] = 1
         y_one_hot = torch.zeros(27)
-        y_one_hot[ch2Index] = 1
+        y_one_hot[ch3Index] = 1
         xs.append(x_one_hot)
         ys.append(y_one_hot)
         nExamples += 1
@@ -62,13 +68,15 @@ Y = torch.stack(ys)
 
 for name in names[developmentSetIndex:trainingSetIndex]:
     treatedName = "." + name + "."
-    for ch1, ch2 in zip(treatedName, treatedName[1:]):
+    for ch1, ch2, ch3 in zip(treatedName, treatedName[1:], treatedName[2:]):
         ch1Index = charToIntMapping[ch1]
         ch2Index = charToIntMapping[ch2]
-        x_one_hot = torch.zeros(27)
+        ch3Index = charToIntMapping[ch3]
+        x_one_hot = torch.zeros(54)
         x_one_hot[ch1Index] = 1
+        x_one_hot[ch2Index + 27] = 1
         y_one_hot = torch.zeros(27)
-        y_one_hot[ch2Index] = 1
+        y_one_hot[ch3Index] = 1
         development_xs.append(x_one_hot)
         development_ys.append(y_one_hot)
         nDevelopmentExamples += 1
@@ -79,18 +87,25 @@ DevelopmentY = torch.stack(development_ys)
 
 for name in names[trainingSetIndex:]:
     treatedName = "." + name + "."
-    for ch1, ch2 in zip(treatedName, treatedName[1:]):
+    for ch1, ch2, ch3 in zip(treatedName, treatedName[1:], treatedName[2:]):
         ch1Index = charToIntMapping[ch1]
         ch2Index = charToIntMapping[ch2]
-        x_one_hot = torch.zeros(27)
+        ch3Index = charToIntMapping[ch3]
+        x_one_hot = torch.zeros(54)
         x_one_hot[ch1Index] = 1
+        x_one_hot[ch2Index + 27] = 1
         y_one_hot = torch.zeros(27)
-        y_one_hot[ch2Index] = 1
+        y_one_hot[ch3Index] = 1
         testing_xs.append(x_one_hot)
         testing_ys.append(y_one_hot)
         nTestingExamples += 1
 TestingX = torch.stack(testing_xs)
 TestingY = torch.stack(testing_ys)
+
+
+
+
+
 
 # ok I have the weights initially, the training examples, and the predictions
 
@@ -101,24 +116,32 @@ TestingY = torch.stack(testing_ys)
 # This needs to repeat for a number of steps
 
 
-
-
 for i in range(500):
     # So we go through this process 10 times
     logits = X @ W # this is similar to our counts matrix in the counting method, but it gets us the counts for that particular initial character
-    probs = logits.softmax(dim=1) # we convert to probabiities from raw counts. 
+    # # find the index
+    # # total_loss = 0
+    # # for j in range(nExamples):
+    # #     row_vector_indices = W[j].argmax(dim=1)
+    # #     # now I want to 
+    # #     vector_1_distribution = W[j][row_vector_indices[0]].softmax()
+    # #     vector_2_distribution = W[j][row_vector_indices[1]].softmax()
+    # #     total_loss += -vector_1_distribution
+    # probs = logits.softmax(dim=1) # we convert to probabiities from raw counts. 
     target_indices = Y.argmax(dim=1) # these are the characters that are following
     # I want to figure out the loss for each example 
     # I know that X is also a set of one hot vectors
     # for each X, I want to figure out the probability of the next
-    loss = -probs[torch.arange(nExamples),target_indices].log().mean() # so here we go, for each example, we've already multiplied to figure out the counts/probs for that particular character. What is the most likely next character? Take the logg of this, then average that, then negate. This is a score for the prediction. This is what you want to minimize in gradient descent. 
+    # loss = -probs[torch.arange(nExamples),target_indices].log().mean()  + 0.3*(W**2).mean()# so here we go, for each example, we've already multiplied to figure out the counts/probs for that particular character. What is the most likely next character? Take the logg of this, then average that, then negate. This is a score for the prediction. This is what you want to minimize in gradient descent. 
+    loss = torch.nn.functional.cross_entropy(logits, target_indices)
     print(loss.item())
     W.grad = None
     loss.backward()
     W.data += -50 * W.grad
 
-
 g = torch.Generator().manual_seed(50283810)
+
+# Evaluate against the development set
 
 logits = DevelopmentX @ W
 probs = logits.softmax(dim=1)
@@ -136,6 +159,25 @@ print(loss.item())
 
 
 
+# for i in range(10):
+#     output = ""
+#     x = torch.zeros(54)
+#     char1Index = 0
+#     char2Index = 0
+#     while True:
+#         x[char1Index] = 1
+#         x[char2Index + 27] = 1
+#         logits = x @ W
+#         probs = logits.softmax(dim=0)
+#         nextCharIndex = torch.multinomial(probs, num_samples=1, generator=g).item()
+#         if nextCharIndex == 0:
+#             print(output)
+#             break
+#         charToAdd = intToCharMapping[nextCharIndex]
+#         output += charToAdd
+#         x = torch.zeros(54)
+#         char1Index = char2Index
+#         char2Index = nextCharIndex
 
 
 
